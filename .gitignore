@@ -1,0 +1,25 @@
+# Ignore proto contracts and generated files
+Sensor_node/proto-contracts/
+Telemetry_sink/proto-contracts/
+Sensor_node/sensor-node/pkg/pb/
+Telemetry_sink/sensor-sink/pkg/pb/
+
+# Ignore environment files
+Sensor_node/.env
+Telemetry_sink/.env
+
+# Ignore build artifacts
+**/*.exe
+**/*.out
+**/*.log
+**/*.tmp
+
+# Ignore IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
