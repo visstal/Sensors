@@ -2,69 +2,74 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"sensor-sink/sensor-sink/pkg/pb"
 	"time"
 )
 
-// TelemetryService handles the business logic for telemetry operations
+type sensorLogEntry struct {
+	SensorName string `json:"sensor_name"`
+	Value      int    `json:"value"`
+	Timestamp  string `json:"timestamp"`
+	ReceivedAt string `json:"received_at"`
+}
+
 type TelemetryService struct {
-	logger *slog.Logger
+	logger      *slog.Logger
+	logFilePath string
 }
 
-// NewTelemetryService creates a new telemetry service
-func NewTelemetryService(logger *slog.Logger) *TelemetryService {
+func NewTelemetryService(logger *slog.Logger, logFilePath string) *TelemetryService {
 	return &TelemetryService{
-		logger: logger,
+		logger:      logger,
+		logFilePath: logFilePath,
 	}
 }
 
-// ProcessReading processes an incoming sensor reading
 func (s *TelemetryService) ProcessReading(ctx context.Context, reading *pb.SensorReading) (*pb.SendReadingResponse, error) {
-	// Validate the reading
 	if err := s.validateReading(reading); err != nil {
-		s.logger.Error("Invalid sensor reading",
-			"error", err,
-			"sensor", reading.GetSensorName(),
-		)
-		return &pb.SendReadingResponse{
-			Success: false,
-			Message: fmt.Sprintf("Invalid reading: %v", err),
-		}, nil
+		return s.handleValidationError(reading, err)
 	}
 
-	// Convert Unix timestamp to time.Time for processing
 	timestamp := time.Unix(reading.Timestamp, 0)
+	s.logReading(reading, timestamp)
 
-	// Log the received reading with structured logging
+	return s.createSuccessResponse(), nil
+}
+
+func (s *TelemetryService) handleValidationError(reading *pb.SensorReading, err error) (*pb.SendReadingResponse, error) {
+	s.logger.Error("Invalid sensor reading",
+		"error", err,
+		"sensor", reading.GetSensorName(),
+	)
+	return &pb.SendReadingResponse{
+		Success: false,
+		Message: fmt.Sprintf("Invalid reading: %v", err),
+	}, nil
+}
+
+func (s *TelemetryService) logReading(reading *pb.SensorReading, timestamp time.Time) {
+	if err := s.writeToLogFile(reading, timestamp); err != nil {
+		s.logger.Error("Failed to write to log file", "error", err)
+	}
+
 	s.logger.Info("Received sensor reading",
 		"sensor_name", reading.SensorName,
 		"value", reading.Value,
 		"timestamp", timestamp.Format(time.RFC3339),
 	)
+}
 
-	// Print to console for immediate visibility (as per requirements)
-	fmt.Printf("[%s] Received from Sensor: %s | Value: %d | Timestamp: %s\n",
-		timestamp.Format("2006-01-02 15:04:05"),
-		reading.SensorName,
-		reading.Value,
-		timestamp.Format(time.RFC3339),
-	)
-
-	// Here you could add additional processing:
-	// - Store to database
-	// - Forward to other systems
-	// - Apply business rules
-	// - Trigger alerts
-
+func (s *TelemetryService) createSuccessResponse() *pb.SendReadingResponse {
 	return &pb.SendReadingResponse{
 		Success: true,
 		Message: "Reading processed successfully",
-	}, nil
+	}
 }
 
-// validateReading validates the sensor reading data
 func (s *TelemetryService) validateReading(reading *pb.SensorReading) error {
 	if reading == nil {
 		return fmt.Errorf("reading is nil")
@@ -78,6 +83,44 @@ func (s *TelemetryService) validateReading(reading *pb.SensorReading) error {
 		return fmt.Errorf("invalid timestamp")
 	}
 
-	// Add more validation rules as needed
 	return nil
+}
+
+func (s *TelemetryService) writeToLogFile(reading *pb.SensorReading, timestamp time.Time) error {
+	jsonLine, err := s.createLogEntry(reading, timestamp)
+	if err != nil {
+		return err
+	}
+
+	return s.appendToFile(jsonLine)
+}
+
+func (s *TelemetryService) createLogEntry(reading *pb.SensorReading, timestamp time.Time) (string, error) {
+	entry := sensorLogEntry{
+		SensorName: reading.SensorName,
+		Value:      int(reading.Value),
+		Timestamp:  timestamp.Format(time.RFC3339),
+		ReceivedAt: time.Now().Format(time.RFC3339),
+	}
+
+	jsonData, err := json.Marshal(entry)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal log entry to JSON: %w", err)
+	}
+
+	return string(jsonData) + "\n", nil
+}
+
+func (s *TelemetryService) appendToFile(logLine string) error {
+	file, err := os.OpenFile(s.logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %w", err)
+	}
+	defer file.Close()
+
+	if _, err = file.WriteString(logLine); err != nil {
+		return fmt.Errorf("failed to write to log file: %w", err)
+	}
+
+	return file.Sync()
 }

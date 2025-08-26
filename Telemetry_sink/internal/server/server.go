@@ -43,7 +43,7 @@ func (s *Server) Start() error {
 	s.server = grpc.NewServer()
 
 	// Create service and handler
-	telemetryService := service.NewTelemetryService(s.logger)
+	telemetryService := service.NewTelemetryService(s.logger, s.config.LogFilePath)
 	telemetryHandler := handler.NewTelemetryHandler(telemetryService, s.logger)
 
 	// Register service
