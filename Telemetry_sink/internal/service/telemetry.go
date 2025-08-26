@@ -38,6 +38,7 @@ func (s *TelemetryService) ProcessReading(ctx context.Context, reading *pb.Senso
 	s.logReading(reading, timestamp)
 
 	return s.createSuccessResponse(), nil
+
 }
 
 func (s *TelemetryService) handleValidationError(reading *pb.SensorReading, err error) (*pb.SendReadingResponse, error) {
